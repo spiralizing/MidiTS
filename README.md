@@ -1,5 +1,6 @@
 # MidiTS
 <a href="https://zenodo.org/badge/latestdoi/191198911"><img src="https://zenodo.org/badge/191198911.svg" alt="DOI"></a>
+
 MIDI - CSV - Time Series, this repository contains functions for constructing time series of music scores from a given CSV file.
 ### READ: It only works with Julia v0.6, will not work with Julia 1.0 yet.
 
