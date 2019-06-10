@@ -274,7 +274,7 @@ function get_time_series(s)
     for i=2:(nv+1) #constructs the output time series
         series[:,i] = serie_notas(n_vs[i-1],tmax)
     end
-    return series, q, mq
+    return series
 end
 ################################################################################
 #get the sequences of pitches
