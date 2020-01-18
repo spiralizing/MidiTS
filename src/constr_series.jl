@@ -28,15 +28,18 @@ function silence_gaps!(s,q) #Sometimes there are small gaps between silences and
     end
 end
 #################################################################################################################################################
-function min_voces(Voces, div) #this function returns the minimum time value of all voices.
-    ns = size(Voces)[1]
+
+function min_voces(n_vs, dv) #this function returns the minimum time value of all voices.
+    ns = size(n_vs)[1]
     mins = Array{Float64}(undef,ns)
     for i = 1:ns
-        dif = filter(x->x >= div,Voces[i][:,2] - Voces[i][:,1])
-        mins[i] = minimum(dif[find(dif)])
+        dif = n_vs[i][:,2] - n_vs[i][:,1]
+        difn = filter(x->x >= dv,dif)
+        mins[i] = minimum(difn)
     end
     return minimum(mins)
 end
+
 ################################################################################################################################################
 function max_tempo(Voces, ns) #This function is to find what is the maximum time when the piece ends.
     Tfinal = Array{Float64}(undef,ns)
@@ -56,7 +59,7 @@ function rounding!(voces, q)
 end
 ####################################################################################################
 ##########################################################################################################
-#Next functin filter the undef voices in left in the array of voices...
+#Next function filter the undef voices in left in the array of voices...
 function filter_undef!(voces)
     nv = size(voces)[1]
     tt = Array{Bool}(undef,nv)
@@ -87,6 +90,22 @@ function notas_hertz!(notas::Array{Float64,1}) #esta funcion convierte el arregl
     end
 end
 ################################################################################
+function serie_notas(Voz, tmax) #constructs the time series of the pithces start - final - voice
+    serie = zeros(tmax)
+    ini = Voz[:,1]
+    dura = Voz[:,2] - Voz[:,1] #duration
+    for i = 1:(length(dura)) #aqui se asignan las notas
+        j = 0
+        x = convert(Int64, ini[i]) + 1
+        while dura[i] > 0
+            serie[x+j] = Voz[i,3]
+            j += 1
+            dura[i] -= 1
+        end
+    end
+    return(serie)
+end
+###########################################################################################
 #Next function is to get the subgroups of size sz in a sequence, subgroups are with overlap.
 function get_subs(t_s,sz)
     subs = []
@@ -199,12 +218,12 @@ function get_time_series(s)
     #mq / sd
     #sd is the smallest reference duration, it would divide the quarter of a note.
     mq = s[1,6] #quarter of a note
-    nv = s[findlast(s[:,3], " Note_on_c"),1] - 1 #estimates how many voices are in the midi
+    nv = s[findlast(x-> x==" Note_on_c",s[:,3]),1] #- 1 #estimates how many voices are in the midi
     voces = Array{Matrix}(undef,nv) #initialze an array
     #next function is to get the time in miliseconds when the pitch starts and ends.
-    if nv ==0
-        nv = 1
-        if findfirst(s[:,3], " Note_off_c") == 0
+    if nv ==1
+        #nv = 1
+        if findfirst(x-> x==" Note_off_c",s[:,3]) == 0
             b = s[s[:,1].==1,:] #takes the events of the voice i
             mat = b[b[:,3].==" Note_on_c", :]
             mat = mat[find(x->x!="", mat[:,5]),:]
@@ -216,23 +235,23 @@ function get_time_series(s)
         end
     else
         voces = Array{Matrix}(undef,nv) #initialze an array
-        if findfirst(s[:,3], " Note_off_c") == 0
+        if findfirst(x-> x==" Note_off_c",s[:,3]) == 0
             #checks if the midi has events of note_off
-            for i = 2:(nv+1) #if does not, it construct the series in this way
+            for i = 1:(nv) #if does not, it construct the series in this way
                 b = s[s[:,1].==i,:] #takes the events of the voice i
                 if size(b[b[:,3].==" Note_on_c", :])[1] == 0; continue; end #checks if there are notes in the channel
                 mat = b[b[:,3].==" Note_on_c", :]
                 mat = mat[find(x->x!="", mat[:,5]),:]
-                voces[i-1] =  get_onon_notes(mat)#construct an array of information of initial time, finish time, pitch and intensity.
+                voces[i] =  get_onon_notes(mat)#construct an array of information of initial time, finish time, pitch and intensity.
             end
         else
-            for i = 2:(nv+1) #if has note_off events , it does this way
-                ini = findfirst(s[s[:,1].==i,3], " Note_on_c") #initial time
-                fin = findlast(s[s[:,1].==i,3], " Note_off_c") #finish time
+            for i = 1:nv #if has note_off events , it does this way
+                ini = findfirst(x-> x==" Note_on_c", s[s[:,1].==i,3]) #initial time
+                fin = findlast(x-> x==" Note_off_c", s[s[:,1].==i,3]) #finish time
                 if ini == 0 || fin == 0; continue; end
                 mat = s[s[:,1].==i,:]
-                mat = mat[find(x->x!="", mat[:,5]),:]
-                voces[i-1] = get_onoff_notes(mat) #construct an array of information of initial time, finish time, pitch and intensity
+                mat = mat[findall(x->x!="", mat[:,5]),:]
+                voces[i] = get_onoff_notes(mat) #construct an array of information of initial time, finish time, pitch and intensity
             end
         end
     end
@@ -264,7 +283,8 @@ function get_time_series(s)
     end
     filter!(x->length(x)>0,n_vs)
     nv = size(n_vs)[1] #the real number of voices
-    q = mq/ round(Int, mq / min_voces(n_vs, mq / sd)) #defines the unit of time  q
+    q = round(Int, mq / (mq / min_voces(n_vs, mq / sd)))
+    #q = mq/ round(Int, mq / min_voces(n_vs, mq / sd)) #defines the unit of time  q
     pitches_gaps!(n_vs,q) #fixes some gaps of miliseconds between the notes
     silence_gaps!(n_vs,q) #fixes some gaps of milisecons of rests
     rounding!(n_vs, q) #rounds up some possible decimals in the time
@@ -276,6 +296,8 @@ function get_time_series(s)
     end
     return series
 end
+
+
 ################################################################################
 #get the sequences of pitches
 function get_pitch_seq(s)
@@ -283,12 +305,12 @@ function get_pitch_seq(s)
     #mq / sd
     #sd is the smallest reference duration, it would divide the quarter of a note.
     mq = s[1,6] #quarter of a note
-    nv = s[findlast(s[:,3], " Note_on_c"),1] - 1 #estimates how many voices are in the midi
+    nv = s[findlast(s[:,3], " Note_on_c"),1]# - 1 #estimates how many voices are in the midi
     voces = Array{Matrix}(undef,nv) #initialze an array
     #next function is to get the time in miliseconds when the pitch starts and ends.
-    if nv ==0
-        nv = 1
-        if findfirst(s[:,3], " Note_off_c") == 0
+    if nv ==1
+        #nv = 1
+        if findfirst(x-> x==" Note_off_c",s[:,3]) == 0
             b = s[s[:,1].==1,:] #takes the events of the voice i
             mat = b[b[:,3].==" Note_on_c", :]
             mat = mat[find(x->x!="", mat[:,5]),:]
@@ -300,23 +322,23 @@ function get_pitch_seq(s)
         end
     else
         voces = Array{Matrix}(undef,nv) #initialze an array
-        if findfirst(s[:,3], " Note_off_c") == 0
+        if findfirst(x-> x==" Note_off_c",s[:,3]) == 0
             #checks if the midi has events of note_off
-            for i = 2:(nv+1) #if does not, it construct the series in this way
+            for i = 1:(nv) #if does not, it construct the series in this way
                 b = s[s[:,1].==i,:] #takes the events of the voice i
                 if size(b[b[:,3].==" Note_on_c", :])[1] == 0; continue; end #checks if there are notes in the channel
                 mat = b[b[:,3].==" Note_on_c", :]
                 mat = mat[find(x->x!="", mat[:,5]),:]
-                voces[i-1] =  get_onon_notes(mat)#construct an array of information of initial time, finish time, pitch and intensity.
+                voces[i] =  get_onon_notes(mat)#construct an array of information of initial time, finish time, pitch and intensity.
             end
         else
-            for i = 2:(nv+1) #if has note_off events , it does this way
-                ini = findfirst(s[s[:,1].==i,3], " Note_on_c") #initial time
-                fin = findlast(s[s[:,1].==i,3], " Note_off_c") #finish time
+            for i = 1:nv #if has note_off events , it does this way
+                ini = findfirst(x-> x==" Note_on_c", s[s[:,1].==i,3]) #initial time
+                fin = findlast(x-> x==" Note_off_c", s[s[:,1].==i,3]) #finish time
                 if ini == 0 || fin == 0; continue; end
                 mat = s[s[:,1].==i,:]
-                mat = mat[find(x->x!="", mat[:,5]),:]
-                voces[i-1] = get_onoff_notes(mat) #construct an array of information of initial time, finish time, pitch and intensity
+                mat = mat[findall(x->x!="", mat[:,5]),:]
+                voces[i] = get_onoff_notes(mat) #construct an array of information of initial time, finish time, pitch and intensity
             end
         end
     end
