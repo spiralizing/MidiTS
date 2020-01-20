@@ -7,7 +7,7 @@ MIDI - CSV - Time Series, this repository contains functions for constructing ti
 ### Usage
 First you need to convert the .mid file to a .csv with midi to csv software freely available here: https://www.fourmilab.ch/webtools/midicsv/
 
-Then open the .csv file (for Julia v0.6):
+Then open the .csv file:
 
 ```
 f = readdlm("File.csv", ',')
